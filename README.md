@@ -66,11 +66,11 @@ These generated names are used as the path in your requests to the proxy.
 To add a new blockchain RPC endpoint, simply add new environment variables following the pattern above. For example:
 
 ```
--e RPC_NODE_NEWCHAIN=https://rpc.newchain.com
--e CACHE_TIME_NEWCHAIN=30
+-e RPC_NODE_NEWCHAIN_TESTNET=https://rpc.newchain.com
+-e CACHE_TIME_NEWCHAIN_TESTNET=30
 ```
 
-This would create a new endpoint accessible at `/newchain`.
+This would create a new endpoint accessible at `/newchain_testnet`.
 
 ## Usage
 
