@@ -6,8 +6,6 @@ This project provides a caching proxy for JSON-RPC requests using Nginx and Lua.
 
 - Supports multiple blockchain RPC endpoints
 - Configurable cache duration for each endpoint
-- Handles both HTTP and WebSocket connections
-- Uses IPv4 to avoid connectivity issues
 - Detailed logging for easy debugging
 
 ## Prerequisites
