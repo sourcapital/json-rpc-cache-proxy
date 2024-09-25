@@ -41,17 +41,21 @@ location /${name} {
         ngx.req.read_body()
         local body = ngx.req.get_body_data()
         if body then
-            body = body:gsub("%s+", "")
-            ngx.var.modified_body = body
             local success, json = pcall(cjson.decode, body)
             if success then
-                ngx.ctx.original_id = json.id
-                json.id = nil
-                local cache_key = cjson.encode(json)
-                ngx.var.cache_key = ngx.md5("${name}" .. cache_key)
-            else
-                ngx.var.cache_key = ngx.md5("${name}" .. body)
+                if type(json.id) == "string" then
+                        ngx.ctx.original_id = '"' .. json.id .. '"'
+                elseif type(json.id) == "number" then
+                        ngx.ctx.original_id = tostring(json.id)
+                else
+                        ngx.ctx.original_id = "null"
+                end
+                json.id = "proxy-cache-id-000-42-123"
+                body = cjson.encode(json)
+                ngx.req.set_body_data(body)
             end
+            ngx.var.cache_key = ngx.md5("${name}" .. body)
+            ngx.var.modified_body = body
         else
             ngx.var.cache_key = ngx.md5("${name}" .. ngx.var.request_uri)
         end
@@ -99,10 +103,8 @@ location /${name} {
             end
 
             if eof then
-                local success, response = pcall(cjson.decode, ngx.ctx.buffer)
-                if success and ngx.ctx.original_id then
-                    response.id = ngx.ctx.original_id
-                    ngx.arg[1] = cjson.encode(response)
+                if ngx.ctx.original_id then
+                    ngx.arg[1] = ngx.ctx.buffer:gsub('"id":"proxy%-cache%-id%-000%-42%-123"', '"id":' .. ngx.ctx.original_id)
                 else
                     ngx.arg[1] = ngx.ctx.buffer
                 end
