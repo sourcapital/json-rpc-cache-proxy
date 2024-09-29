@@ -1,12 +1,15 @@
 # JSON-RPC Cache Proxy
 
-This project provides a caching proxy for JSON-RPC requests using Nginx and Lua. It's designed to reduce the load on blockchain RPC nodes by caching responses for a configurable amount of time.
+This project provides a high-performance caching proxy for JSON-RPC requests using Python and FastAPI. It's designed to reduce the load on blockchain RPC nodes by caching responses for a configurable amount of time.
 
 ## Features
 
 - Supports multiple blockchain RPC endpoints
 - Configurable cache duration for each endpoint
 - Detailed logging for easy debugging
+- Custom TTL cache implementation for efficient caching
+- FastAPI for high-performance asynchronous request handling
+- Easy to deploy and scale
 
 ## Prerequisites
 
@@ -28,12 +31,12 @@ This project provides a caching proxy for JSON-RPC requests using Nginx and Lua.
 3. Run the container:
    ```
    docker run -d -p 8080:80 \
-     -e RPC_NODE_ETHEREUM=https://mainnet.infura.io/v3/YOUR_API_KEY \
-     -e RPC_NODE_ARBITRUM=https://arbitrum-mainnet.infura.io/v3/YOUR_API_KEY \
-     -e RPC_NODE_SOLANA=https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY \
-     -e CACHE_TIME_ETHEREUM=5 \
-     -e CACHE_TIME_ARBITRUM=5 \
-     -e CACHE_TIME_SOLANA=5 \
+     -e RPC_ETHEREUM=https://mainnet.infura.io/v3/YOUR_API_KEY \
+     -e RPC_ARBITRUM=https://arbitrum-mainnet.infura.io/v3/YOUR_API_KEY \
+     -e RPC_SOLANA=https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY \
+     -e CACHE_TTL_ETHEREUM=5 \
+     -e CACHE_TTL_ARBITRUM=5 \
+     -e CACHE_TTL_SOLANA=5 \
      --name json-rpc-cache-proxy \
      json-rpc-cache-proxy
    ```
@@ -46,16 +49,16 @@ This project provides a caching proxy for JSON-RPC requests using Nginx and Lua.
 
 ### Environment Variables
 
-- `RPC_NODE_<CHAIN>`: The URL of the RPC node for a specific blockchain. Replace `<CHAIN>` with the blockchain name (e.g., ETHEREUM, ARBITRUM, SOLANA).
-- `CACHE_TIME_<CHAIN>`: The cache duration in seconds for a specific blockchain. If not set, it defaults to 10 seconds.
+- `RPC_<CHAIN>`: The URL of the RPC node for a specific blockchain. Replace `<CHAIN>` with the blockchain name (e.g., ETHEREUM, ARBITRUM, SOLANA).
+- `CACHE_TTL_<CHAIN>`: The cache duration in seconds for a specific blockchain. If not set, it defaults to 10 seconds.
 
 ### Endpoint Names
 
-The endpoint names used in the proxy are automatically generated from the environment variable names. The proxy removes the `RPC_NODE_` prefix and converts the remaining part to lowercase. For example:
+The endpoint names used in the proxy are automatically generated from the environment variable names. The proxy removes the `RPC_` prefix and converts the remaining part to lowercase. For example:
 
-- `RPC_NODE_ETHEREUM` becomes `/ethereum`
-- `RPC_NODE_ARBITRUM` becomes `/arbitrum`
-- `RPC_NODE_SOLANA` becomes `/solana`
+- `RPC_ETHEREUM` becomes `/ethereum`
+- `RPC_ARBITRUM` becomes `/arbitrum`
+- `RPC_SOLANA` becomes `/solana`
 
 These generated names are used as the path in your requests to the proxy.
 
@@ -64,8 +67,8 @@ These generated names are used as the path in your requests to the proxy.
 To add a new blockchain RPC endpoint, simply add new environment variables following the pattern above. For example:
 
 ```
--e RPC_NODE_NEWCHAIN_TESTNET=https://rpc.newchain.com
--e CACHE_TIME_NEWCHAIN_TESTNET=30
+-e RPC_NEWCHAIN_TESTNET=https://rpc.newchain.com
+-e CACHE_TTL_NEWCHAIN_TESTNET=30
 ```
 
 This would create a new endpoint accessible at `/newchain_testnet`.

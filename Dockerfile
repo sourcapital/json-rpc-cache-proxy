@@ -1,16 +1,10 @@
-FROM openresty/openresty:alpine
+FROM python:3.9-slim
 
-RUN apk add --no-cache lua-cjson
+WORKDIR /app
 
-COPY nginx.conf.template /usr/local/openresty/nginx/conf/nginx.conf.template
-COPY generate-configs.sh /generate-configs.sh
-COPY generate-nginx-config.sh /generate-nginx-config.sh
+COPY requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
 
-RUN mkdir -p /var/cache/nginx/json_rpc_cache_proxy && \
-    chown -R nobody:nobody /var/cache/nginx && \
-    chmod -R 755 /var/cache/nginx && \
-    chmod +x /generate-configs.sh /generate-nginx-config.sh
+COPY . .
 
-EXPOSE 80
-
-CMD ["/bin/sh", "-c", "/generate-nginx-config.sh && /generate-configs.sh"]
+CMD ["python", "main.py"]
