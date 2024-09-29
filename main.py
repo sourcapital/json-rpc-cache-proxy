@@ -41,7 +41,7 @@ class JSONRPCCacheProxy:
     def __init__(self):
         self.session = None
         self.cache = ChainSpecificTTLCache()
-        self.cache_statuses = deque(maxlen=1000)  # Store last 1000 requests
+        self.cache_statuses = deque(maxlen=1000)  # Store last 1000 cache statuses for cache ratio calculations
         self.last_ratio_log = time.time()
 
     @staticmethod
@@ -116,9 +116,9 @@ class JSONRPCCacheProxy:
 
                 logger.info(
                     f"Cache Ratio (last {total_requests} requests): "
-                    f"HIT: {hit_ratio:.2f}%, "
-                    f"MISS: {miss_ratio:.2f}%, "
-                    f"EXPIRED: {expired_ratio:.2f}%"
+                    f"HIT: {hit_count} ({hit_ratio:.2f}%), "
+                    f"MISS: {miss_count} ({miss_ratio:.2f}%), "
+                    f"EXPIRED: {expired_count} ({expired_ratio:.2f}%)"
                 )
 
             self.last_ratio_log = now
