@@ -6,10 +6,8 @@ This project provides a high-performance caching proxy for JSON-RPC requests usi
 
 - Supports multiple blockchain RPC endpoints
 - Configurable cache duration for each endpoint
-- Detailed logging for easy debugging
 - Custom TTL cache implementation for efficient caching
-- FastAPI for high-performance asynchronous request handling
-- Easy to deploy and scale
+- Detailed logging for easy debugging
 
 ## Prerequisites
 
