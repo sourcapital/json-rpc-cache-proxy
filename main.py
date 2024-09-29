@@ -3,6 +3,7 @@ import json
 import hashlib
 from contextlib import asynccontextmanager
 from typing import Dict, Any
+from collections import deque
 
 import uvicorn
 import aiohttp
@@ -40,6 +41,8 @@ class JSONRPCCacheProxy:
     def __init__(self):
         self.session = None
         self.cache = ChainSpecificTTLCache()
+        self.cache_statuses = deque(maxlen=1000)  # Store last 1000 requests
+        self.last_ratio_log = time.time()
 
     @staticmethod
     def generate_cache_key(chain: str, body: Dict[str, Any]) -> str:
@@ -93,7 +96,32 @@ class JSONRPCCacheProxy:
             "cache_key": cache_key
         }))
 
+        self.cache_statuses.append(cache_status)
+        self._log_cache_ratio()
+
         return response, cache_status
+
+    def _log_cache_ratio(self):
+        now = time.time()
+        if now - self.last_ratio_log >= 10:  # Log every 10+ seconds
+            total_requests = len(self.cache_statuses)
+            if total_requests > 0:
+                hit_count = self.cache_statuses.count("HIT")
+                miss_count = self.cache_statuses.count("MISS")
+                expired_count = self.cache_statuses.count("EXPIRED")
+
+                hit_ratio = hit_count / total_requests * 100
+                miss_ratio = miss_count / total_requests * 100
+                expired_ratio = expired_count / total_requests * 100
+
+                logger.info(
+                    f"Cache Ratio (last {total_requests} requests): "
+                    f"HIT: {hit_ratio:.2f}%, "
+                    f"MISS: {miss_ratio:.2f}%, "
+                    f"EXPIRED: {expired_ratio:.2f}%"
+                )
+
+            self.last_ratio_log = now
 
 
 proxy = JSONRPCCacheProxy()
