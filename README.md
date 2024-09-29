@@ -48,7 +48,7 @@ This project provides a high-performance caching proxy for JSON-RPC requests usi
 ### Environment Variables
 
 - `RPC_<CHAIN>`: The URL of the RPC node for a specific blockchain. Replace `<CHAIN>` with the blockchain name (e.g., ETHEREUM, ARBITRUM, SOLANA).
-- `CACHE_TTL_<CHAIN>`: The cache duration in seconds for a specific blockchain. If not set, it defaults to 10 seconds.
+- `CACHE_TTL_<CHAIN>`: The cache duration in seconds for a specific blockchain.
 
 ### Endpoint Names
 
