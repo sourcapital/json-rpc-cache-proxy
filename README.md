@@ -7,6 +7,7 @@ This project provides a high-performance caching proxy for JSON-RPC requests usi
 - Supports multiple blockchain RPC endpoints
 - Configurable cache duration for each endpoint
 - Custom TTL cache implementation for efficient caching
+- WebSocket support (no caching)
 - Detailed logging for easy debugging
 
 ## Prerequisites
@@ -30,33 +31,36 @@ This project provides a high-performance caching proxy for JSON-RPC requests usi
    ```
    docker run -d -p 8080:80 \
      -e RPC_ETHEREUM=https://mainnet.infura.io/v3/YOUR_API_KEY \
+     -e WS_ETHEREUM=wss://mainnet.infura.io/ws/v3/YOUR_API_KEY \
      -e RPC_ARBITRUM=https://arbitrum-mainnet.infura.io/v3/YOUR_API_KEY \
+     -e WS_ARBITRUM=wss://arbitrum-mainnet.infura.io/ws/v3/YOUR_API_KEY \
      -e RPC_SOLANA=https://mainnet.helius-rpc.com/?api-key=YOUR_API_KEY \
-     -e CACHE_TTL_ETHEREUM=5 \
-     -e CACHE_TTL_ARBITRUM=5 \
-     -e CACHE_TTL_SOLANA=5 \
+     -e CACHE_TTL_ETHEREUM=10 \
+     -e CACHE_TTL_ARBITRUM=10 \
+     -e CACHE_TTL_SOLANA=10 \
      --name json-rpc-cache-proxy \
      json-rpc-cache-proxy
    ```
 
    Replace `YOUR_API_KEY` with your actual API keys.
 
-4. The proxy is now running and accessible at `http://localhost:8080`.
+4. The proxy is now running and accessible at `localhost:8080`.
 
 ## Configuration
 
 ### Environment Variables
 
 - `RPC_<CHAIN>`: The URL of the RPC node for a specific blockchain. Replace `<CHAIN>` with the blockchain name (e.g., ETHEREUM, ARBITRUM, SOLANA).
+- `WS_<CHAIN>`: The WebSocket URL for a specific blockchain (optional).
 - `CACHE_TTL_<CHAIN>`: The cache duration in seconds for a specific blockchain.
 
 ### Endpoint Names
 
 The endpoint names used in the proxy are automatically generated from the environment variable names. The proxy removes the `RPC_` prefix and converts the remaining part to lowercase. For example:
 
-- `RPC_ETHEREUM` becomes `/ethereum`
-- `RPC_ARBITRUM` becomes `/arbitrum`
-- `RPC_SOLANA` becomes `/solana`
+- `RPC_ETHEREUM` becomes `/ethereum` for HTTP and `/ethereum/ws` for WebSocket
+- `RPC_ARBITRUM` becomes `/arbitrum` for HTTP and `/arbitrum/ws` for WebSocket
+- `RPC_SOLANA` becomes `/solana` for HTTP and `/solana/ws` for WebSocket
 
 These generated names are used as the path in your requests to the proxy.
 
@@ -66,21 +70,33 @@ To add a new blockchain RPC endpoint, simply add new environment variables follo
 
 ```
 -e RPC_NEWCHAIN_TESTNET=https://rpc.newchain.com
--e CACHE_TTL_NEWCHAIN_TESTNET=30
+-e WS_NEWCHAIN_TESTNET=wss://ws.newchain.com
+-e CACHE_TTL_NEWCHAIN_TESTNET=10
 ```
 
-This would create a new endpoint accessible at `/newchain_testnet`.
+This would create a new HTTP endpoint accessible at `/newchain_testnet` and a WebSocket endpoint at `/newchain_testnet/ws`.
 
 ## Usage
 
 Once the proxy is running, you can send JSON-RPC requests to it using the generated endpoint names. The proxy will cache the responses and serve cached responses when possible.
 
-Example using curl:
+### HTTP Example
+
+Using `curl`:
 
 ```bash
 curl -X POST http://localhost:8080/ethereum \
   -H "Content-Type: application/json" \
   -d '{"jsonrpc":"2.0","method":"eth_blockNumber","params":[],"id":1}'
+```
+
+### WebSocket Example
+
+Using `wscat`:
+
+```bash
+wscat -c ws://localhost:8080/ethereum/ws
+> {"jsonrpc":"2.0", "id": 1, "method": "eth_subscribe", "params": ["newHeads"]}
 ```
 
 Replace `/ethereum` with the appropriate chain name as generated from your environment variables.
