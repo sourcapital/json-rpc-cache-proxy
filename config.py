@@ -26,6 +26,7 @@ class Config:
 
     # RPC settings
     RPC_URL: Dict[str, str] = {}
+    WS_URL: Dict[str, str] = {}
     CACHE_TTL: Dict[str, int] = {}
 
     @classmethod
@@ -34,8 +35,19 @@ class Config:
             if key.startswith("RPC_"):
                 chain = key[4:].lower()
                 cls.RPC_URL[chain] = value
+
+                ws_key = f"WS_{chain.upper()}"
+                cls.WS_URL[chain] = get_env(ws_key)  # This will be None if not set
+
                 cache_time_key = f"CACHE_TTL_{chain.upper()}"
                 cls.CACHE_TTL[chain] = int(get_env_or_raise(cache_time_key))
+
+    @classmethod
+    def get_ws_url(cls, chain: str) -> str:
+        ws_url = cls.WS_URL.get(chain)
+        if ws_url is None:
+            raise ValueError(f"No websocket URL configured for chain: {chain}")
+        return ws_url
 
 
 config = Config()
