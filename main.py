@@ -70,7 +70,8 @@ class JSONRPCCacheProxy:
         cached_response, cache_status = chain_cache.get(cache_key)
 
         if cache_status == "HIT":
-            response = cached_response
+            response = cached_response.copy()  # Create a copy of the cached response
+            response['id'] = body.get('id')  # Replace the id with the one from the request
             upstream_response_time = ""
         else:
             try:
