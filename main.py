@@ -111,12 +111,12 @@ class JSONRPCCacheProxy:
             batch_response, overall_cache_status, batch_request, cache_key_map = [], "HIT", [], {}
 
             for sub_request in rpc_request:
-                sub_response, sub_cache_status, sub_cache_key, sub_request = await process_single_request(sub_request)
-                cache_key_map[sub_request['id']] = sub_cache_key
+                sub_response, sub_cache_status, sub_cache_key, sub_request_to_send = await process_single_request(sub_request)
+                if sub_request_to_send:
+                    cache_key_map[sub_request_to_send['id']] = sub_cache_key
+                    batch_request.append(sub_request_to_send)
                 if sub_response:
                     batch_response.append(sub_response)
-                else:
-                    batch_request.append(sub_request)
                 if sub_cache_status != "HIT":
                     overall_cache_status = "MISS" if sub_cache_status == "MISS" else "EXPIRED"
 
