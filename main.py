@@ -3,6 +3,7 @@ import json
 import uuid
 import asyncio
 import hashlib
+from typing import Union, Dict, List, Tuple
 from collections import deque
 from contextlib import asynccontextmanager
 
@@ -46,115 +47,116 @@ class JSONRPCCacheProxy:
         self.session = None
 
     @staticmethod
-    def generate_cache_key(chain: str, body: {}) -> str:
+    def generate_cache_key(chain: str, body: Union[Dict, List]) -> str:
         """
         Generate a unique cache key based on the chain and request body.
+        Supports both single requests and batched requests.
         """
-        body_copy = body.copy()
-        body_copy.pop('id', None)
-        return hashlib.md5(f"{chain}:{json.dumps(body_copy, sort_keys=True)}".encode()).hexdigest()
+        if isinstance(body, list):
+            # For batched requests
+            cleaned_bodies = []
+            for item in body:
+                item_copy = item.copy()
+                item_copy.pop('id', None)
+                cleaned_bodies.append(json.dumps(item_copy, sort_keys=True))
+            cache_key_content = f"{chain}:{':'.join(sorted(cleaned_bodies))}"
+        else:
+            # For single requests
+            body_copy = body.copy()
+            body_copy.pop('id', None)
+            cache_key_content = f"{chain}:{json.dumps(body_copy, sort_keys=True)}"
 
-    async def handle_http_request(self, chain: str, body: {}, request: Request) -> ({}, str, str):
+        return hashlib.md5(cache_key_content.encode()).hexdigest()
+
+    async def handle_http_request(self, chain: str, request: Request) -> Tuple[Union[Dict, List], str, str]:
         """
         Handle an incoming HTTP JSON-RPC request, using cache if possible.
+        Supports both single requests and batched requests.
         """
+        rpc_request = await request.json()
+
         start_time = time.time()
+        upstream_start_time = None
+        upstream_end_time = None
 
         if chain not in config.RPC_URL:
             logger.error(f"No RPC endpoint configured for chain: {chain}")
             raise HTTPException(status_code=404, detail="No RPC endpoint configured for this chain")
 
-        # JSON-RPC supports sending a batch of requests as a top-level list; if we get that, we do
-        # cache lookups on the subrequests independently; anything that misses we then propagate in
-        # an upstream batch, and independently cache those responses.
-        if type(body) == list:
-            response = []
-            need_upstream = []
-            cache_keys = {}
-            chain_cache = self.cache.get_cache(chain, config.CACHE_TTL[chain])
-            cache_status = "HIT"
-            for subreq in body:
-                cache_key = self.generate_cache_key(chain, subreq)
-                cache_keys[subreq['id']] = cache_key
+        chain_specific_cache = self.cache.get_cache(chain, config.CACHE_TTL[chain])
 
-                cached_response, cache_stat = chain_cache.get(cache_key)
-
-                if cache_stat == "HIT":
-                    response.append(cached_response.copy())
-                    response[-1]['id'] = subreq.get('id')  #  Replace the id with the one from the subreq
-                else:
-                    if cache_stat == "MISS":
-                        cache_status = "MISS"
-                    elif cache_stat == "EXPIRED" and cache_status != "MISS":
-                        cache_status = "EXPIRED"
-                    need_upstream.append(subreq)
-
-            if need_upstream:
-                try:
-                    async with self.session.post(config.RPC_URL[chain], json=need_upstream) as resp:
-                        subresponses = await resp.json()
-
-                    upstream_response_time = f"{(time.time() - start_time) * 1000:.2f}"
-
-                    for subres in subresponses:
-                        # Batch response order is arbitrary, so look up via the id to figure out
-                        # which cache key this response belongs to
-                        cache_key = cache_keys[subres['id']]
-                        chain_cache.set(cache_key, subres)
-                        response.append(subres)
-                        logger.debug(f"Successfully fetched and cached subreq response for chain: {chain}")
-
-                except aiohttp.ClientError as e:
-                    logger.error(f"Error during http communication with the {chain} RPC: {str(e)}")
-                    raise HTTPException(status_code=502, detail="Error communicating with node")
-            else:
-                upstream_response_time = ""
-
-            # For our cache_key to return to the client just hash the concatenation of all the
-            # sub request cache keys, ordered by id:
-            cache_key = hashlib.md5(f"{chain}:{':'.join(v for _, v in sorted(cache_keys.items()))}".encode()).hexdigest()
-
-        else:
-            cache_key = self.generate_cache_key(chain, body)
-            chain_cache = self.cache.get_cache(chain, config.CACHE_TTL[chain])
-
-            cached_response, cache_status = chain_cache.get(cache_key)
-
+        async def process_single_request(rpc_request: Dict) -> Tuple[Dict, str, str, Dict]:
+            cache_key = self.generate_cache_key(chain, rpc_request)
+            cached_response, cache_status = chain_specific_cache.get(cache_key)
             if cache_status == "HIT":
-                response = cached_response.copy()  # Create a copy of the cached response
-                response['id'] = body.get('id')  # Replace the id with the one from the request
-                upstream_response_time = ""
+                response = cached_response.copy()
+                response['id'] = rpc_request.get('id')
+                return response, cache_status, cache_key, None
             else:
-                try:
-                    async with self.session.post(config.RPC_URL[chain], json=body) as resp:
-                        response = await resp.json()
+                return None, cache_status, cache_key, rpc_request
 
-                    chain_cache.set(cache_key, response)
-                    logger.debug(f"Successfully fetched and cached response for chain: {chain}")
-                    upstream_response_time = f"{(time.time() - start_time) * 1000:.2f}"
-                except aiohttp.ClientError as e:
-                    logger.error(f"Error during http communication with the {chain} RPC: {str(e)}")
-                    raise HTTPException(status_code=502, detail="Error communicating with node")
+        async def fetch_from_rpc(rpc_request: Union[Dict, List]) -> Union[Dict, List]:
+            nonlocal upstream_start_time, upstream_end_time
+            try:
+                upstream_start_time = time.time()
+                async with self.session.post(config.RPC_URL[chain], json=rpc_request) as response:
+                    result = await response.json()
+                upstream_end_time = time.time()
+                return result
+            except aiohttp.ClientError as error:
+                logger.error(f"Error during HTTP communication with the {chain} RPC: {str(error)}")
+                raise HTTPException(status_code=502, detail="Error communicating with node")
 
+        if isinstance(rpc_request, list):
+            batch_response, overall_cache_status, batch_request, cache_key_map = [], "HIT", [], {}
 
-        total_time = f"{(time.time() - start_time) * 1000:.2f}"
+            for sub_request in rpc_request:
+                sub_response, sub_cache_status, sub_cache_key, sub_request = await process_single_request(sub_request)
+                cache_key_map[sub_request['id']] = sub_cache_key
+                if sub_response:
+                    batch_response.append(sub_response)
+                else:
+                    batch_request.append(sub_request)
+                if sub_cache_status != "HIT":
+                    overall_cache_status = "MISS" if sub_cache_status == "MISS" else "EXPIRED"
+
+            if batch_request:
+                rpc_response = await fetch_from_rpc(batch_request)
+                for sub_response in rpc_response:
+                    sub_cache_key = cache_key_map[sub_response['id']]
+                    chain_specific_cache.set(sub_cache_key, sub_response)
+                    batch_response.append(sub_response)
+
+            batch_cache_key = self.generate_cache_key(chain, rpc_request)
+            final_response, final_cache_status, final_cache_key = batch_response, overall_cache_status, batch_cache_key
+        else:
+            single_response, single_cache_status, single_cache_key, single_request = await process_single_request(rpc_request)
+
+            if single_request:
+                single_response = await fetch_from_rpc(rpc_request)
+                chain_specific_cache.set(single_cache_key, single_response)
+
+            final_response, final_cache_status, final_cache_key = single_response, single_cache_status, single_cache_key
+
+        total_request_time = (time.time() - start_time)
+        upstream_time = (upstream_end_time - upstream_start_time) if upstream_start_time and upstream_end_time else None
 
         logger.info(json.dumps({
             "remote_addr": request.client.host,
             "x_forwarded_for": request.headers.get("X-Forwarded-For", "n/a"),
-            "request_body": json.dumps(body),
+            "request_body": json.dumps(rpc_request),
             "status": "200",
-            "upstream_cache_status": cache_status,
-            "upstream_response_time": f"{upstream_response_time}ms" if upstream_response_time else "n/a",
-            "total_response_time": f"{total_time}ms",
-            "cache_key": cache_key,
+            "upstream_cache_status": final_cache_status,
+            "upstream_response_time": f"{upstream_time * 1e3:.2f}ms" if upstream_time else "n/a",
+            "total_response_time": f"{total_request_time * 1e3:.2f}ms",
+            "cache_key": final_cache_key,
             "request_uri": request.url.path,
         }))
 
-        self.cache_statuses.append(cache_status)
+        self.cache_statuses.append(final_cache_status)
         self._log_cache_ratio()
 
-        return response, cache_status, cache_key
+        return final_response, final_cache_status, final_cache_key
 
     def _log_cache_ratio(self):
         now = time.time()
@@ -187,8 +189,7 @@ async def http_endpoint(chain: str, request: Request):
     """
     FastAPI route handler for HTTP JSON-RPC requests.
     """
-    body = await request.json()
-    response, cache_status, cache_key = await proxy.handle_http_request(chain, body, request)
+    response, cache_status, cache_key = await proxy.handle_http_request(chain, request)
 
     # Create a JSONResponse with the additional headers
     return JSONResponse(
