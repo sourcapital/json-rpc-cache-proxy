@@ -100,7 +100,7 @@ class JSONRPCCacheProxy:
             try:
                 upstream_start_time = time.time()
                 async with self.session.post(config.RPC_URL[chain], json=rpc_request) as response:
-                    result = await response.json()
+                    result = json.loads(await response.text())
                 upstream_end_time = time.time()
                 return result
             except aiohttp.ClientError as error:
